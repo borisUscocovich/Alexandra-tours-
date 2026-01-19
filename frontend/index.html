@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Alexandra Tours | AI Concierge</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050505;
+            --text-gold: #D4AF37;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #fire {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 1;
+        }
+
+        .ui-layer {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .brand {
+            position: absolute;
+            top: 15%;
+            text-align: center;
+            opacity: 0.9;
+        }
+
+        .brand h1 {
+            font-weight: 200;
+            color: white;
+            letter-spacing: 5px;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+        }
+
+        .brand p {
+            color: var(--text-gold);
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            margin-top: 5px;
+            font-weight: 600;
+        }
+
+        .orb-trigger {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.02) 0%, transparent 70%);
+            cursor: pointer;
+            pointer-events: auto;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.5s ease;
+        }
+
+        .orb-trigger:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-text {
+            font-weight: 200;
+            letter-spacing: 3px;
+            font-size: 0.9rem;
+            margin-top: 30px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.6);
+            transition: opacity 0.3s ease;
+        }
+
+        #debugConsole {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            max-height: 80px;
+            font-family: monospace;
+            font-size: 10px;
+            color: #444;
+            padding: 10px;
+            pointer-events: none;
+            overflow: hidden;
+            display: block;
+            z-index: 1000;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top: 2px solid var(--text-gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="fire"></canvas>
+
+    <div class="ui-layer">
+        <div class="brand">
+            <h1>ALEXANDRA</h1>
+            <p>INTELLIGENCE</p>
+        </div>
+
+        <div id="mainBtn" class="orb-trigger">
+            <span id="btnText"
+                style="text-align: center; font-size: 0.8rem; letter-spacing: 2px; color:rgba(255,255,255,0.5);">
+                TAP TO<br>CONNECT
+            </span>
+            <div id="loading" class="spinner hidden"></div>
+        </div>
+
+        <div id="statusLabel" class="status-text">STANDBY</div>
+    </div>
+
+    <div id="debugConsole"></div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+        import { Conversation } from 'https://esm.sh/@11labs/client';
+
+        // --- GLOBAL STATE ---
+        let audioCtx, analyser, dataArray;
+        let conversation = null;
+        let isConnected = false;
+        let mode = 'idle';
+        let globalMicStream = null;
+
+        // --- DEBUG ---
+        const debugConsole = document.getElementById('debugConsole');
+        function lg(msg) {
+            console.log(msg);
+            const line = document.createElement('div');
+            line.textContent = `> ${msg}`;
+            if (debugConsole) debugConsole.prepend(line);
+        }
+        window.onerror = (msg, src, line) => lg(`ERR: ${msg} (${line})`);
+
+        // --- 1. VISUALS ---
+        const canvas = document.getElementById('fire');
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+        const uniforms = {
+            uTime: { value: 0 },
+            uIntensity: { value: 0.5 },
+            uColorA: { value: new THREE.Color(0x050000) },
+            uColorB: { value: new THREE.Color(0xff6619) }
+        };
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: `void main() { gl_Position = vec4(position, 1.0); }`,
+            fragmentShader: `
+                precision highp float;
+                uniform float uTime;
+                uniform float uIntensity;
+                uniform vec3 uColorA;
+                uniform vec3 uColorB;
+                vec3 mod289(vec3 x){return x - floor(x / 289.0) * 289.0;}
+                vec2 mod289(vec2 x){return x - floor(x / 289.0) * 289.0;}
+                vec3 permute(vec3 x){return mod289(((x*34.0)+1.0)*x);}
+                float snoise(vec2 v){
+                    const vec4 C = vec4(0.211324865, 0.366025404, -0.577350269, 0.024390243);
+                    vec2 i  = floor(v + dot(v, C.yy));
+                    vec2 x0 = v - i + dot(i, C.xx);
+                    vec2 i1 = (x0.x > x0.y) ? vec2(1.0,0.0) : vec2(0.0,1.0);
+                    vec4 x12 = x0.xyxy + C.xxzz;
+                    x12.xy -= i1;
+                    i = mod289(i);
+                    vec3 p = permute(permute(i.y + vec3(0.0,i1.y,1.0)) + i.x + vec3(0.0,i1.x,1.0));
+                    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                    m = m*m*m*m;
+                    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                    vec3 h = abs(x) - 0.5;
+                    vec3 ox = floor(x + 0.5);
+                    vec3 a0 = x - ox;
+                    m *= 1.792842914 - 0.853734721 * (a0*a0 + h*h);
+                    vec3 g;
+                    g.x  = a0.x * x0.x + h.x * x0.y;
+                    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                    return 130.0 * dot(m, g);
+                }
+                void main() {
+                    vec2 uv = gl_FragCoord.xy / vec2(600.0, 600.0); 
+                    float n = snoise(uv * 2.0 + vec2(0.0, uTime * 0.1));
+                    float heat = smoothstep(0.1, 0.9, n);
+                    vec3 color = mix(uColorA, uColorB, heat);
+                    float alpha = heat * uIntensity;
+                    if(alpha < 0.01) discard;
+                    gl_FragColor = vec4(color, alpha);
+                }
+            `,
+            transparent: true,
+            depthTest: false,
+        });
+
+        scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+
+        function animate(t) {
+            requestAnimationFrame(animate);
+            uniforms.uTime.value = t * 0.001;
+
+            if (isConnected && analyser) {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length / 2; i++) sum += dataArray[i];
+                const avg = sum / (dataArray.length / 2);
+                let target = 0.5;
+                if (mode === 'speaking') target = 0.8 + (Math.sin(t * 0.01) * 0.2);
+                else if (mode === 'listening') target = 0.4 + (avg / 255.0);
+                uniforms.uIntensity.value += (target - uniforms.uIntensity.value) * 0.1;
+            } else {
+                uniforms.uIntensity.value = 0.4 + Math.sin(t * 0.001) * 0.1;
+            }
+            renderer.render(scene, camera);
+        }
+        animate(0);
+
+        // --- 2. LOGIC ---
+        const btn = document.getElementById('mainBtn');
+        const btnText = document.getElementById('btnText');
+        const loader = document.getElementById('loading');
+        const statusLabel = document.getElementById('statusLabel');
+
+        let endBtn = document.querySelector("#endBtnDiv");
+        if (!endBtn) {
+            endBtn = document.createElement('div');
+            endBtn.id = "endBtnDiv";
+            endBtn.innerHTML = "❌ END SESSION";
+            endBtn.style.cssText = "position:absolute; bottom: 8%; font-size: 0.7rem; color: rgba(255,100,100,0.7); letter-spacing: 2px; cursor: pointer; border: 1px solid rgba(255,100,100,0.3); padding: 5px 15px; border-radius: 20px; display: none; pointer-events: auto; background: rgba(0,0,0,0.5);";
+            document.querySelector('.ui-layer').appendChild(endBtn);
+            endBtn.onclick = (e) => { e.stopPropagation(); disconnect(); };
+        }
+
+        async function initAudioAndPatch() {
+            lg("Requesting Mic...");
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            globalMicStream = stream;
+            lg("Mic Active.");
+
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            // HEARTBEAT: Prevent AudioContext Suspension
+            audioCtx.onstatechange = () => {
+                lg("AudioCtx: " + audioCtx.state);
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            };
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            const source = audioCtx.createMediaStreamSource(stream);
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            // GUM PATCH: ARMORED TRACKS
+            const originalGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            navigator.mediaDevices.getUserMedia = async (constraints) => {
+                if (constraints && constraints.audio) {
+                    lg("SDK joined.");
+
+                    // ARMOR: Prevent SDK from stopping logic
+                    globalMicStream.getTracks().forEach(track => {
+                        if (!track._realStop) {
+                            track._realStop = track.stop.bind(track);
+                            track.stop = () => { console.log("Blocked Stop"); };
+                        }
+                    });
+
+                    return globalMicStream;
+                }
+                return originalGUM(constraints);
+            };
+        }
+
+        async function toggle() {
+            if (!isConnected) {
+                await connect();
+            } else {
+                if (mode === 'paused') {
+                    mode = 'listening';
+                    setMute(false);
+                    btnText.innerHTML = "PAUSE";
+                    statusLabel.textContent = "LISTENING";
+                    statusLabel.style.color = "#4ade80";
+                    btn.style.borderColor = "rgba(255,255,255,0.1)";
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                } else {
+                    mode = 'paused';
+                    setMute(true);
+                    btnText.innerHTML = "RESUME";
+                    statusLabel.textContent = "PAUSED (MUTED)";
+                    statusLabel.style.color = "rgba(255,200,100,0.8)";
+                    btn.style.borderColor = "rgba(255,200,100,0.5)";
+                }
+            }
+        }
+
+        function setMute(muted) {
+            if (globalMicStream) {
+                globalMicStream.getAudioTracks().forEach(t => t.enabled = !muted);
+                lg("Mute: " + muted);
+            }
+        }
+
+        async function connect() {
+            if (isConnected) return;
+            try {
+                btnText.classList.add('hidden');
+                loader.classList.remove('hidden');
+                statusLabel.textContent = "INITIALIZING...";
+
+                await initAudioAndPatch();
+
+                statusLabel.textContent = "CONNECTING...";
+                conversation = await Conversation.startSession({
+                    agentId: 'agent_4901ke7sexbver49t30hb3qzxszf',
+                    onConnect: () => {
+                        isConnected = true;
+                        mode = 'listening';
+                        loader.classList.add('hidden');
+                        btnText.classList.remove('hidden');
+                        btnText.innerHTML = "PAUSE";
+                        statusLabel.textContent = "ONLINE";
+                        statusLabel.style.color = "#4ade80";
+                        endBtn.style.display = "block";
+                        lg("Connected.");
+                    },
+                    onDisconnect: () => disconnect(),
+                    onError: (e) => {
+                        lg("Err: " + e);
+                        statusLabel.textContent = "ERROR";
+                        disconnect();
+                    },
+                    onModeChange: (m) => {
+                        if (mode === 'paused') return;
+                        mode = m.mode;
+                        statusLabel.textContent = mode === 'speaking' ? "SPEAKING" : "LISTENING";
+                        statusLabel.style.color = mode === 'speaking' ? "#D4AF37" : "#4ade80";
+                    }
+                });
+            } catch (e) {
+                lg("Fatal: " + e.message);
+                statusLabel.textContent = "FAILED";
+                disconnect();
+            }
+        }
+
+        async function disconnect() {
+            isConnected = false;
+            // Un-armor and stop
+            if (globalMicStream) {
+                globalMicStream.getTracks().forEach(t => {
+                    if (t._realStop) t._realStop();
+                    else t.stop();
+                });
+                globalMicStream = null;
+            }
+            if (conversation) { try { await conversation.endSession(); } catch (e) { } conversation = null; }
+            if (audioCtx) { await audioCtx.close(); audioCtx = null; }
+            window.location.reload();
+        }
+
+        btn.addEventListener('click', toggle);
+        window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
+
+    </script>
+</body>
+
+</html>

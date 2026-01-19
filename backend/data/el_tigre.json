@@ -1,0 +1,280 @@
+{
+    "restaurant": {
+        "id": "el_tigre_gracia",
+        "name": "Bar El Tigre",
+        "location": {
+            "address": "Carrer de Verdi 45, Gràcia, Barcelona",
+            "coordinates": {
+                "lat": 41.4025,
+                "lon": 2.1581
+            }
+        },
+        "history": {
+            "founded": 1952,
+            "founder": "Abuelo Paco",
+            "story": "Fundado en 1952 por el abuelo Paco cuando volvió de Argentina. Es un bar de toda la vida, conocido por mantener la esencia del barrio.",
+            "specialty_origin": "La receta de las patatas bravas es de la abuela Rosa y es ultra secreta."
+        },
+        "rating": {
+            "score": 4.6,
+            "review_count": 847,
+            "platform": "Google"
+        },
+        "schedule": {
+            "monday": "Cerrado",
+            "tuesday": "12:00-00:00",
+            "wednesday": "12:00-00:00",
+            "thursday": "12:00-00:00",
+            "friday": "12:00-00:00",
+            "saturday": "12:00-00:00",
+            "sunday": "12:00-00:00"
+        },
+        "menu": {
+            "tapas": [
+                {
+                    "name": "Patatas bravas",
+                    "price": 6.50,
+                    "description": "Especialidad de la casa, salsa secreta de la abuela Rosa",
+                    "dietary": [
+                        "vegetarian",
+                        "spicy"
+                    ]
+                },
+                {
+                    "name": "Pan con tomate",
+                    "price": 3.50,
+                    "description": "Con tomate de colgar y aceite de oliva virgen extra",
+                    "dietary": [
+                        "vegetarian",
+                        "vegan"
+                    ]
+                },
+                {
+                    "name": "Jamón ibérico",
+                    "price": 18.00,
+                    "description": "Ración de jamón de bellota",
+                    "dietary": [
+                        "gluten_free"
+                    ]
+                },
+                {
+                    "name": "Croquetas caseras",
+                    "price": 8.00,
+                    "description": "6 unidades, de pollo y jamón",
+                    "dietary": [
+                        "contains_gluten",
+                        "contains_dairy"
+                    ]
+                },
+                {
+                    "name": "Albóndigas de la abuela",
+                    "price": 9.50,
+                    "description": "En salsa de tomate casera",
+                    "dietary": [
+                        "contains_gluten"
+                    ]
+                },
+                {
+                    "name": "Pulpo a la gallega",
+                    "price": 16.00,
+                    "description": "Con pimentón y cachelos",
+                    "dietary": [
+                        "gluten_free",
+                        "seafood"
+                    ]
+                },
+                {
+                    "name": "Boquerones en vinagre",
+                    "price": 7.00,
+                    "description": "Con ajo y perejil",
+                    "dietary": [
+                        "gluten_free",
+                        "seafood"
+                    ]
+                },
+                {
+                    "name": "Pimientos de padrón",
+                    "price": 6.00,
+                    "description": "Unos pican y otros no",
+                    "dietary": [
+                        "vegetarian",
+                        "vegan",
+                        "gluten_free"
+                    ]
+                }
+            ],
+            "main_courses": [
+                {
+                    "name": "Hamburguesa El Tigre",
+                    "price": 14.00,
+                    "description": "Carne 100% vacuno, queso manchego, cebolla caramelizada",
+                    "dietary": [
+                        "contains_gluten",
+                        "contains_dairy"
+                    ]
+                },
+                {
+                    "name": "Secreto ibérico a la brasa",
+                    "price": 18.00,
+                    "description": "Con guarnición de verduras",
+                    "dietary": [
+                        "gluten_free"
+                    ]
+                },
+                {
+                    "name": "Lubina al horno",
+                    "price": 22.00,
+                    "description": "Con patatas panadera",
+                    "dietary": [
+                        "gluten_free",
+                        "seafood"
+                    ]
+                },
+                {
+                    "name": "Paella",
+                    "price": 15.00,
+                    "description": "Mínimo 2 personas, precio por persona. Marinera o Mixta.",
+                    "dietary": [
+                        "gluten_free",
+                        "seafood"
+                    ]
+                },
+                {
+                    "name": "Entrecot con patatas",
+                    "price": 20.00,
+                    "description": "300g de ternera de Girona",
+                    "dietary": [
+                        "gluten_free"
+                    ]
+                }
+            ],
+            "drinks": {
+                "soft_drinks": [
+                    {
+                        "name": "Caña",
+                        "price": 2.50
+                    },
+                    {
+                        "name": "Vermut de grifo",
+                        "price": 3.50,
+                        "description": "Especialidad de la casa"
+                    },
+                    {
+                        "name": "Vino tinto casa",
+                        "price": 4.00,
+                        "unit": "copa"
+                    },
+                    {
+                        "name": "Vino blanco casa",
+                        "price": 4.00,
+                        "unit": "copa"
+                    },
+                    {
+                        "name": "Sangría",
+                        "price": 12.00,
+                        "unit": "jarra"
+                    },
+                    {
+                        "name": "Tinto de verano",
+                        "price": 3.00
+                    },
+                    {
+                        "name": "Café / Cortado",
+                        "price": 1.80
+                    },
+                    {
+                        "name": "Chocolate caliente",
+                        "price": 3.00
+                    }
+                ],
+                "cocktails": [
+                    {
+                        "name": "Gin tonic",
+                        "price": 8.00,
+                        "brands": [
+                            "Tanqueray",
+                            "Hendricks",
+                            "Beefeater"
+                        ]
+                    },
+                    {
+                        "name": "Mojito",
+                        "price": 8.00
+                    },
+                    {
+                        "name": "Aperol Spritz",
+                        "price": 7.00
+                    },
+                    {
+                        "name": "Margarita",
+                        "price": 8.00
+                    },
+                    {
+                        "name": "Cuba libre",
+                        "price": 6.00
+                    }
+                ],
+                "spirits": {
+                    "gin": [
+                        "Tanqueray",
+                        "Hendricks",
+                        "Beefeater"
+                    ],
+                    "rum": [
+                        "Bacardí",
+                        "Havana Club",
+                        "Brugal"
+                    ],
+                    "vodka": [
+                        "Absolut",
+                        "Smirnoff"
+                    ],
+                    "whisky": [
+                        "Johnnie Walker",
+                        "Jameson",
+                        "Jack Daniels"
+                    ]
+                }
+            },
+            "desserts": [
+                {
+                    "name": "Tarta de queso casera",
+                    "price": 6.00,
+                    "dietary": [
+                        "vegetarian",
+                        "contains_dairy",
+                        "contains_gluten"
+                    ]
+                },
+                {
+                    "name": "Crema catalana",
+                    "price": 5.50,
+                    "dietary": [
+                        "vegetarian",
+                        "contains_dairy",
+                        "gluten_free"
+                    ]
+                },
+                {
+                    "name": "Flan de abuela Rosa",
+                    "price": 5.00,
+                    "dietary": [
+                        "vegetarian",
+                        "contains_dairy",
+                        "gluten_free"
+                    ]
+                },
+                {
+                    "name": "Brownie con helado",
+                    "price": 6.50,
+                    "dietary": [
+                        "vegetarian",
+                        "contains_dairy",
+                        "contains_gluten",
+                        "contains_nuts"
+                    ]
+                }
+            ]
+        }
+    }
+}
