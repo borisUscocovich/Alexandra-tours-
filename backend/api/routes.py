@@ -86,6 +86,10 @@ async def get_tool_context(request: Request):
         conversation_id = body.get("conversation_id", body.get("session_id", "default_session"))
         user_message = body.get("user_message", body.get("trigger", ""))
         
+        print(f"--- TOOL REQUEST RECEIVED ---")
+        print(f"CID: {conversation_id}")
+        print(f"MSG: {user_message}")
+        
         # 1. Get/Create State
         state = get_state(conversation_id)
         

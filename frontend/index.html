@@ -155,7 +155,7 @@
         <div id="mainBtn" class="orb-trigger">
             <span id="btnText"
                 style="text-align: center; font-size: 0.8rem; letter-spacing: 2px; color:rgba(255,255,255,0.5);">
-                TAP TO<br>CONNECT
+                HOLD TO<br>TALK
             </span>
             <div id="loading" class="spinner hidden"></div>
         </div>
@@ -261,8 +261,15 @@
                 for (let i = 0; i < dataArray.length / 2; i++) sum += dataArray[i];
                 const avg = sum / (dataArray.length / 2);
                 let target = 0.5;
-                if (mode === 'speaking') target = 0.8 + (Math.sin(t * 0.01) * 0.2);
-                else if (mode === 'listening') target = 0.4 + (avg / 255.0);
+
+                if (mode === 'speaking') {
+                    target = 0.8 + (Math.sin(t * 0.01) * 0.2);
+                } else if (mode === 'listening') {
+                    target = 0.4 + (avg / 255.0);
+                } else if (mode === 'paused') {
+                    target = 0.2; // Low simmer when paused
+                }
+
                 uniforms.uIntensity.value += (target - uniforms.uIntensity.value) * 0.1;
             } else {
                 uniforms.uIntensity.value = 0.4 + Math.sin(t * 0.001) * 0.1;
@@ -298,7 +305,8 @@
             // HEARTBEAT: Prevent AudioContext Suspension
             audioCtx.onstatechange = () => {
                 lg("AudioCtx: " + audioCtx.state);
-                if (audioCtx.state === 'suspended') audioCtx.resume();
+                // Only auto-resume if NOT paused
+                if (audioCtx.state === 'suspended' && mode !== 'paused') audioCtx.resume();
             };
             if (audioCtx.state === 'suspended') await audioCtx.resume();
 
@@ -328,27 +336,35 @@
             };
         }
 
-        async function toggle() {
+        async function startTalking(e) {
+            if (e.cancelable) e.preventDefault();
+
             if (!isConnected) {
                 await connect();
-            } else {
-                if (mode === 'paused') {
-                    mode = 'listening';
-                    setMute(false);
-                    btnText.innerHTML = "PAUSE";
-                    statusLabel.textContent = "LISTENING";
-                    statusLabel.style.color = "#4ade80";
-                    btn.style.borderColor = "rgba(255,255,255,0.1)";
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
-                } else {
-                    mode = 'paused';
-                    setMute(true);
-                    btnText.innerHTML = "RESUME";
-                    statusLabel.textContent = "PAUSED (MUTED)";
-                    statusLabel.style.color = "rgba(255,200,100,0.8)";
-                    btn.style.borderColor = "rgba(255,200,100,0.5)";
-                }
+                return;
             }
+
+            mode = 'listening';
+            setMute(false);
+            btn.style.borderColor = "rgba(74, 222, 128, 0.8)";
+            btn.style.backgroundColor = "rgba(74, 222, 128, 0.1)";
+            btnText.innerHTML = "LISTENING...";
+            statusLabel.textContent = "ESCUCHANDO";
+            statusLabel.style.color = "#4ade80";
+        }
+
+        function stopTalking(e) {
+            if (e.cancelable) e.preventDefault();
+
+            if (!isConnected) return;
+
+            mode = 'paused';
+            setMute(true);
+            btn.style.borderColor = "rgba(255, 255, 255, 0.1)";
+            btn.style.backgroundColor = "";
+            btnText.innerHTML = "HOLD TO<br>TALK";
+            statusLabel.textContent = "SUELTA PARA ENVIAR";
+            statusLabel.style.color = "rgba(255,200,100,0.8)";
         }
 
         function setMute(muted) {
@@ -372,12 +388,15 @@
                     agentId: 'agent_4901ke7sexbver49t30hb3qzxszf',
                     onConnect: () => {
                         isConnected = true;
-                        mode = 'listening';
+                        // Start in PAUSED (Muted) state for Push-to-Talk
+                        mode = 'paused';
+                        setMute(true);
+
                         loader.classList.add('hidden');
                         btnText.classList.remove('hidden');
-                        btnText.innerHTML = "PAUSE";
-                        statusLabel.textContent = "ONLINE";
-                        statusLabel.style.color = "#4ade80";
+                        btnText.innerHTML = "HOLD TO<br>TALK";
+                        statusLabel.textContent = "CONECTADO"; // Ready
+                        statusLabel.style.color = "rgba(255,255,255,0.8)";
                         endBtn.style.display = "block";
                         lg("Connected.");
                     },
@@ -416,7 +435,13 @@
             window.location.reload();
         }
 
-        btn.addEventListener('click', toggle);
+        // PUSH TO TALK LISTENERS
+        btn.addEventListener('mousedown', startTalking);
+        btn.addEventListener('mouseup', stopTalking);
+        btn.addEventListener('touchstart', startTalking, { passive: false });
+        btn.addEventListener('touchend', stopTalking, { passive: false });
+        btn.addEventListener('mouseleave', stopTalking);
+        btn.addEventListener('touchcancel', stopTalking);
         window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
 
     </script>
