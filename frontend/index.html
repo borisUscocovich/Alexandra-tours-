@@ -149,7 +149,7 @@
     <div class="ui-layer">
         <div class="brand">
             <h1>ALEXANDRA</h1>
-            <p>INTELLIGENCE</p>
+            <p>TOURS</p>
         </div>
 
         <div id="mainBtn" class="orb-trigger">
@@ -160,7 +160,7 @@
             <div id="loading" class="spinner hidden"></div>
         </div>
 
-        <div id="statusLabel" class="status-text">STANDBY</div>
+        <div id="statusLabel" class="status-text">YOUR LOCAL GUIDE</div>
     </div>
 
     <div id="debugConsole"></div>
@@ -373,6 +373,28 @@
                 lg("Mute: " + muted);
             }
         }
+
+        let userLocation = { lat: 41.3851, lon: 2.1734 }; // Default Barcelona
+
+        async function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude
+                        };
+                        console.log("Location:", userLocation);
+                    },
+                    (error) => {
+                        console.log("Location denied, using default Barcelona");
+                    }
+                );
+            }
+        }
+
+        // Llamar al cargar página
+        getLocation();
 
         async function connect() {
             if (isConnected) return;

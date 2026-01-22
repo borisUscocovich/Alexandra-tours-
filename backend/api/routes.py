@@ -140,3 +140,110 @@ async def get_tool_context(request: Request):
              "instructions": "Error en sistema de estado. Actúa como camarera normal básica."
         }
 
+
+
+@router.post("/tools/city_context")
+async def get_city_context(request: Request):
+    """
+    Tool endpoint para Alexandra Tours.
+    Devuelve contexto urbano: clima, lugares cercanos, eventos, hora local.
+    """
+    import datetime
+    from backend.services.weather import weather_service
+
+    try:
+        body = await request.json()
+    except:
+        body = {}
+
+    # Obtener ubicación (default Barcelona centro)
+    lat = body.get("latitude", 41.3851)
+    lon = body.get("longitude", 2.1734)
+    city = body.get("city", "Barcelona")
+
+    # 1. Clima actual
+    weather = await weather_service.get_weather(city)
+
+    # 2. Hora local y contexto temporal
+    now = datetime.datetime.now()
+    hour = now.hour
+
+    if 6 <= hour < 12:
+        time_context = "mañana"
+        meal_suggestion = "desayuno o brunch"
+    elif 12 <= hour < 17:
+        time_context = "mediodía"
+        meal_suggestion = "almuerzo"
+    elif 17 <= hour < 21:
+        time_context = "tarde"
+        meal_suggestion = "tapas o aperitivo"
+    else:
+        time_context = "noche"
+        meal_suggestion = "cena o copas"
+
+    # 3. Lugares destacados (mock por ahora, luego Google Places API)
+    # Load from the new JSON file we created
+    import json
+    import os
+    PLACES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "barcelona_places.json")
+    
+    featured_places = []
+    if os.path.exists(PLACES_FILE):
+        try:
+            with open(PLACES_FILE, "r", encoding="utf-8") as f:
+                places_data = json.load(f)
+                # Just take one from each category for the "featured" list
+                p_list = places_data.get("places", {})
+                if "restaurants" in p_list and p_list["restaurants"]:
+                     r = p_list["restaurants"][0]
+                     featured_places.append({
+                         "name": r["name"],
+                         "type": r["type"], 
+                         "distance": "5 min caminando", # Mock distance
+                         "tip": r.get("tip", ""),
+                         "affiliate_link": r.get("affiliate", {}).get("id")
+                     })
+                if "attractions" in p_list and p_list["attractions"]:
+                     a = p_list["attractions"][0]
+                     featured_places.append({
+                         "name": a["name"],
+                         "type": a["type"],
+                         "distance": "20 min transporte",
+                         "tip": a.get("tip", ""),
+                         "affiliate_link": None
+                     })
+        except Exception as e:
+            print(f"Error loading places: {e}")
+
+    # Fallback if empty or file issue
+    if not featured_places:
+        featured_places = [
+            {
+                "name": "Bar Cañete",
+                "type": "tapas",
+                "distance": "5 min caminando",
+                "tip": "Pedir la tortilla y las croquetas",
+                "affiliate_link": None
+            }
+        ]
+
+    # 4. Eventos hoy (mock, luego Eventbrite/Fever API)
+    events_today = [
+        {
+            "name": "Concierto Jazz en Jamboree",
+            "time": "21:00",
+            "price": "€15",
+            "booking_link": "https://example.com"
+        }
+    ]
+
+    return {
+        "city": city,
+        "current_time": now.strftime("%H:%M"),
+        "time_context": time_context,
+        "meal_suggestion": meal_suggestion,
+        "weather": weather,
+        "featured_places": featured_places,
+        "events_today": events_today,
+        "instructions": f"Es {time_context} en {city}. El clima es {weather.get('description', 'agradable')}. Sugiere actividades apropiadas para este momento. Si el usuario pregunta por comida, es buen momento para {meal_suggestion}."
+    }

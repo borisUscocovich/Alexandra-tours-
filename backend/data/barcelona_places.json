@@ -1,0 +1,62 @@
+{
+    "city": "Barcelona",
+    "places": {
+        "restaurants": [
+            {
+                "id": "bar_canete",
+                "name": "Bar Cañete",
+                "type": "tapas",
+                "neighborhood": "Raval",
+                "coordinates": {
+                    "lat": 41.3802,
+                    "lon": 2.1701
+                },
+                "price_range": "€€",
+                "best_for": [
+                    "tapas",
+                    "local experience",
+                    "seafood"
+                ],
+                "tip": "La tortilla y las gambas son imprescindibles",
+                "hours": "13:00-00:00",
+                "affiliate": {
+                    "platform": "thefork",
+                    "id": "xxx"
+                }
+            }
+        ],
+        "attractions": [
+            {
+                "id": "bunkers_carmel",
+                "name": "Bunkers del Carmel",
+                "type": "viewpoint",
+                "neighborhood": "Carmel",
+                "coordinates": {
+                    "lat": 41.4183,
+                    "lon": 2.1567
+                },
+                "price_range": "free",
+                "best_for": [
+                    "sunset",
+                    "views",
+                    "photos"
+                ],
+                "tip": "Llevar bebida, mejor al atardecer",
+                "hours": "24h"
+            }
+        ],
+        "neighborhoods": [
+            {
+                "id": "born",
+                "name": "El Born",
+                "vibe": "trendy, artsy, boutiques",
+                "best_for": [
+                    "shopping",
+                    "cafes",
+                    "nightlife"
+                ],
+                "avoid": "Muy lleno fines de semana mediodía"
+            }
+        ]
+    }
+}
