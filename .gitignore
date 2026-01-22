@@ -11,3 +11,6 @@ venv/
 
 # Editor
 .vscode/
+
+# Other
+nul
