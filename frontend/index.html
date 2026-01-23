@@ -304,6 +304,7 @@
 
             // HEARTBEAT: Prevent AudioContext Suspension
             audioCtx.onstatechange = () => {
+                if (!audioCtx) return;  // Guard clause
                 lg("AudioCtx: " + audioCtx.state);
                 // Only auto-resume if NOT paused
                 if (audioCtx.state === 'suspended' && mode !== 'paused') audioCtx.resume();
@@ -453,7 +454,11 @@
                 globalMicStream = null;
             }
             if (conversation) { try { await conversation.endSession(); } catch (e) { } conversation = null; }
-            if (audioCtx) { await audioCtx.close(); audioCtx = null; }
+            if (audioCtx) {
+                audioCtx.onstatechange = null;  // Remove listener first
+                try { await audioCtx.close(); } catch(e) {}  // Prevent "close twice" error
+                audioCtx = null;
+            }
             window.location.reload();
         }
 
