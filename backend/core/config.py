@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_AGENT_ID: str = ""
+    GOOGLE_MAPS_API_KEY: str = ""
 
     # Context Settings
     DEFAULT_CITY: str = "Barcelona"

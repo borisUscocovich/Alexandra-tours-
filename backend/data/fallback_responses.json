@@ -1,0 +1,19 @@
+{
+    "greetings": {
+        "es": "¡Hola! Soy Alexandra, tu guía local. ¿Qué te apetece hacer hoy?",
+        "en": "Hi! I'm Alexandra, your local guide. What would you like to do today?",
+        "fr": "Salut! Je suis Alexandra, votre guide locale. Que voulez-vous faire aujourd'hui?"
+    },
+    "default_recommendations": {
+        "Barcelona": {
+            "morning": ["La Boqueria", "Café de l'Òpera", "Paseo por el Gótico"],
+            "afternoon": ["Park Güell", "Barceloneta", "Tapas en El Born"],
+            "evening": ["Bunkers del Carmel", "Cena en Gràcia", "Copas en Raval"]
+        }
+    },
+    "faqs": {
+        "wifi": "La mayoría de cafés tienen wifi gratis. Te recomiendo cualquier Starbucks o cafetería local.",
+        "metro": "El metro funciona de 5h a medianoche, los viernes hasta 2h, sábados 24h.",
+        "safety": "Barcelona es segura, pero cuida tu cartera en zonas turísticas como Las Ramblas."
+    }
+}

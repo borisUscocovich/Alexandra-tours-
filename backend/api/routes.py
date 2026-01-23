@@ -2,6 +2,12 @@ import json
 import os
 from fastapi import APIRouter, HTTPException, Request
 from backend.services.weather import weather_service
+from backend.services.optimizer import optimizer
+from backend.services.cache import cache, CACHE_TTL
+from backend.services.rate_limiter import rate_limiter
+from backend.services.metrics import metrics
+import datetime
+import time
 
 router = APIRouter()
 
@@ -148,7 +154,6 @@ async def get_city_context(request: Request):
     Tool endpoint para Alexandra Tours.
     Devuelve contexto urbano: clima, lugares cercanos, eventos, hora local.
     """
-    import datetime
     from backend.services.weather import weather_service
 
     try:
@@ -156,10 +161,40 @@ async def get_city_context(request: Request):
     except:
         body = {}
 
+    # 1. Identificar usuario
+    user_id = body.get("session_id", body.get("conversation_id", "anonymous"))
+    tier = body.get("tier", "free")
+    user_message = body.get("user_message", "")
+
+    # 2. Check rate limit
+    limit_check = rate_limiter.check_limit(user_id, tier)
+    if not limit_check["allowed"]:
+        metrics.record_bypass()
+        return {
+            "error": "rate_limited",
+            "message": limit_check["message"],
+            "reset_in": limit_check.get("reset_in"),
+            "upgrade_url": "https://alexandra.tours/premium"
+        }
+
+    # 3. Check cache
+    # Solo usamos cache si NO hay mensaje especifico (contexto general)
+    cache_key = f"city_context:{body.get('city', 'Barcelona')}:{tier}"
+    cached = cache.get(cache_key)
+    if cached and not user_message:
+        metrics.cache_hits += 1
+        return cached
+    
+    if not user_message:
+         metrics.cache_misses += 1
+
     # Obtener ubicación (default Barcelona centro)
     lat = body.get("latitude", 41.3851)
     lon = body.get("longitude", 2.1734)
     city = body.get("city", "Barcelona")
+    
+    # Extract query for optimization
+    user_query = body.get("query", body.get("user_message", ""))
 
     # 1. Clima actual
     weather = await weather_service.get_weather(city)
@@ -181,63 +216,77 @@ async def get_city_context(request: Request):
         time_context = "noche"
         meal_suggestion = "cena o copas"
 
-    # 3. Lugares destacados (mock por ahora, luego Google Places API)
-    # Load from the new JSON file we created
+    # Get Tier Config
+    tier_config = optimizer.get_response_config(tier)
+
+    # 3. Lugares destacados (Lazy Context)
     import json
     import os
     PLACES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "barcelona_places.json")
     
-    featured_places = []
+    all_places = []
     if os.path.exists(PLACES_FILE):
         try:
             with open(PLACES_FILE, "r", encoding="utf-8") as f:
                 places_data = json.load(f)
-                # Just take one from each category for the "featured" list
+                # Flatten the list for filtering
                 p_list = places_data.get("places", {})
-                if "restaurants" in p_list and p_list["restaurants"]:
-                     r = p_list["restaurants"][0]
-                     featured_places.append({
-                         "name": r["name"],
-                         "type": r["type"], 
-                         "distance": "5 min caminando", # Mock distance
-                         "tip": r.get("tip", ""),
-                         "affiliate_link": r.get("affiliate", {}).get("id")
-                     })
-                if "attractions" in p_list and p_list["attractions"]:
-                     a = p_list["attractions"][0]
-                     featured_places.append({
-                         "name": a["name"],
-                         "type": a["type"],
-                         "distance": "20 min transporte",
-                         "tip": a.get("tip", ""),
-                         "affiliate_link": None
-                     })
+                for cat, items in p_list.items():
+                    for item in items:
+                        item['category'] = cat # Add category metadata
+                        all_places.append(item)
         except Exception as e:
             print(f"Error loading places: {e}")
 
-    # Fallback if empty or file issue
+    featured_places = []
+    
+    # Hack 3: Contexto Lazy / Hack 1: Filter
+    if user_query:
+        featured_places = optimizer.filter_context(user_query, all_places)
+    else:
+        # Default if no query
+        if all_places: featured_places = all_places[:tier_config["max_places"]]
+
+    # Enforce tier limits even on filtered results
+    featured_places = featured_places[:tier_config["max_places"]]
+
+    # Fallback
     if not featured_places:
         featured_places = [
-            {
-                "name": "Bar Cañete",
-                "type": "tapas",
-                "distance": "5 min caminando",
-                "tip": "Pedir la tortilla y las croquetas",
-                "affiliate_link": None
-            }
+            {"name": "Bar Cañete", "type": "tapas", "tip": "Clásico imprescindible.", "distance": "5min"}
         ]
 
-    # 4. Eventos hoy (mock, luego Eventbrite/Fever API)
-    events_today = [
-        {
-            "name": "Concierto Jazz en Jamboree",
-            "time": "21:00",
-            "price": "€15",
-            "booking_link": "https://example.com"
-        }
-    ]
+    # 4. Eventos
+    if tier_config["include_events"]:
+        events_today = [
+            {"name": "Jazz en Jamboree", "time": "21:00", "price": "15€"}
+        ]
+    else:
+        events_today = []
+    
+    # Hacks 5, 6, 7, 9, 15: Optimization Logic
+    opt_result = optimizer.get_optimized_response(user_query)
+    
+    base_instruction = f"Es {time_context} en {city}. Clima: {weather.get('description', 'ok')}. Actividad sugerida: {meal_suggestion}. "
+    
+    # Brevity Rules
+    brevity_rules = (
+        " REGLAS DE BREVEDAD (CRÍTICO): "
+        "- Máximo 2 oraciones por respuesta "
+        "- NO listas largas, máximo 3 opciones "
+        "- Usa '¿Quieres que te cuente más?' en vez de explicar todo "
+    )
+    if tier == "free":
+        brevity_rules += "- Si el usuario es FREE tier: respuestas ultra-concisas y NUNCA repitas información. "
 
-    return {
+    if opt_result["bypass"]:
+        # Strong instruction to just follow the script
+        final_instructions = f"{opt_result['instruction']} (Responde EXACTAMENTE esto o traducido: '{opt_result['suggested_response']}')"
+    else:
+        # Complex logic allowed, but keep it short
+        final_instructions = f"{base_instruction} {opt_result['instruction']} {brevity_rules}"
+
+    response = {
         "city": city,
         "current_time": now.strftime("%H:%M"),
         "time_context": time_context,
@@ -245,5 +294,31 @@ async def get_city_context(request: Request):
         "weather": weather,
         "featured_places": featured_places,
         "events_today": events_today,
-        "instructions": f"Es {time_context} en {city}. El clima es {weather.get('description', 'agradable')}. Sugiere actividades apropiadas para este momento. Si el usuario pregunta por comida, es buen momento para {meal_suggestion}."
+        "instructions": final_instructions,
+        "tier": tier
+    }
+
+    # 5. Guardar en cache (Solo si no hay mensaje específico)
+    if not user_query:
+        cache.set(cache_key, response, CACHE_TTL["city_context"])
+
+    # 6. Registrar request
+    rate_limiter.record_request(user_id)
+    metrics.record_request(tier)
+
+    # Estimate logic for metrics (approx)
+    tokens_in = len(user_message) / 4
+    tokens_out = len(str(response)) / 4
+    metrics.record_llm_call(int(tokens_in), int(tokens_out))
+
+    return response
+
+@router.get("/admin/metrics")
+async def get_metrics(api_key: str = None):
+    """Dashboard interno de costos."""
+    # TODO: Proteger con API key
+    return {
+        "usage": metrics.to_dict(),
+        "cache": cache.stats(),
+        "timestamp": time.time()
     }
