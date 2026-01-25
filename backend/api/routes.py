@@ -6,8 +6,11 @@ from backend.services.optimizer import optimizer
 from backend.services.cache import cache, CACHE_TTL
 from backend.services.rate_limiter import rate_limiter
 from backend.services.metrics import metrics
+from backend.services.analytics import analytics
+from fastapi.responses import HTMLResponse
 import datetime
 import time
+import os
 
 router = APIRouter()
 
@@ -311,10 +314,37 @@ async def get_city_context(request: Request):
     tokens_out = len(str(response)) / 4
     metrics.record_llm_call(int(tokens_in), int(tokens_out))
 
+    # 7. Persistent Analytics Log
+    analytics.record_interaction(
+        user_id=user_id,
+        tier=tier,
+        endpoint="city_context",
+        tokens_in=int(tokens_in),
+        tokens_out=int(tokens_out),
+        bypass=opt_result["bypass"],
+        intent=opt_result.get("intent", "unknown"), # Optimizer logic normally returns this inside, assuming hack
+        city=city
+    )
+
     return response
 
-@router.get("/admin/metrics")
-async def get_metrics(api_key: str = None):
+@router.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard():
+    """Serves the static admin dashboard."""
+    # En prod idealmente usar Jinja2, aquí leemos el archivo simple
+    dash_path = os.path.join(os.path.dirname(__file__), "..", "admin_dashboard.html")
+    if os.path.exists(dash_path):
+        with open(dash_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "Dashboard file not found."
+
+@router.get("/api/admin/stats")
+async def get_admin_stats(api_key: str = None):
+    """JSON Data for dashboard."""
+    return analytics.get_dashboard_stats()
+
+@router.get("/admin/metrics_legacy")
+async def get_metrics_legacy(api_key: str = None):
     """Dashboard interno de costos."""
     # TODO: Proteger con API key
     return {

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alexandra Tours | Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; font-family: 'Segoe UI', sans-serif; }
+        .card { border: none; shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .value { font-size: 2rem; font-weight: bold; color: #2c3e50; }
+        .label { font-size: 0.9rem; color: #7f8c8d; text-transform: uppercase; }
+        .header { background: #2c3e50; color: white; padding: 20px; margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h1>🛡️ Alexandra Admin</h1>
+            <span id="lastUpdated">...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 1. USUARIOS -->
+        <h4 class="mb-3">👥 Usuarios</h4>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Total Únicos</div>
+                    <div class="value" id="users_total">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Activos Hoy</div>
+                    <div class="value" id="users_today">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Activos Semanales</div>
+                    <div class="value" id="users_week">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Consultas / Usuario</div>
+                    <div class="value" id="avg_queries">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. COSTOS -->
+        <h4 class="mb-3">💰 Costos & Tokens (Blindaje)</h4>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Costo Total (Est.)</div>
+                    <div class="value" style="color: #27ae60;">$<span id="cost_total">0</span></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Bypass Rate</div>
+                    <div class="value" style="color: #d35400;"><span id="bypass_rate">0</span>%</div>
+                    <small>Ahorro por caché/reglas</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Tokens In</div>
+                    <div class="value" id="tokens_in">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="label">Tokens Out</div>
+                    <div class="value" id="tokens_out">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. PRODUCTO -->
+        <h4 class="mb-3">🧠 Top Intenciones</h4>
+        <div class="row">
+            <div class="col-md-6">
+                 <div class="card p-3">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Intención</th>
+                                <th>Consultas</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top_intents_table">
+                            <!-- JS fill -->
+                        </tbody>
+                    </table>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const res = await fetch('/api/admin/stats');
+                const data = await res.json();
+                
+                // Users
+                document.getElementById('users_total').innerText = data.users.total_unique;
+                document.getElementById('users_today').innerText = data.users.active_today;
+                document.getElementById('users_week').innerText = data.users.active_week;
+                document.getElementById('avg_queries').innerText = data.engagement.avg_per_user;
+
+                // Costs
+                document.getElementById('cost_total').innerText = data.costs.total_usd;
+                document.getElementById('bypass_rate').innerText = data.costs.bypass_rate;
+                document.getElementById('tokens_in').innerText = data.costs.tokens_in;
+                document.getElementById('tokens_out').innerText = data.costs.tokens_out;
+
+                // Lists
+                const tbody = document.getElementById('top_intents_table');
+                tbody.innerHTML = '';
+                data.top_intents.forEach(item => {
+                    const row = `<tr><td>${item.name}</td><td>${item.count}</td></tr>`;
+                    tbody.innerHTML += row;
+                });
+
+                document.getElementById('lastUpdated').innerText = new Date().toLocaleTimeString();
+
+            } catch (e) {
+                console.error("Error loading stats:", e);
+            }
+        }
+
+        // Load on start and every 10s
+        loadData();
+        setInterval(loadData, 10000);
+    </script>
+</body>
+</html>
