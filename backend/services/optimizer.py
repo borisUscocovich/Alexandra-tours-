@@ -42,11 +42,25 @@ class TokenOptimizer:
     def classify_intent(self, text: str) -> str:
         """
         Hack 5: Clasificación ligera Regex
+        Updates for V2: distinguish 'medium' vs 'high' cost
         """
         for intent, pattern in self.patterns.items():
             if re.search(pattern, text, re.IGNORECASE):
+                # These are all "Low Cost" (Cheap) -> Bypass
                 return intent
-        return "complex"
+        
+        # Heuristic for Medium vs High Cost
+        # High Cost keywords: planning, multi-day, comparison, deep history
+        high_cost_keywords = ["itinerario", "plan", "ruta", "dias", "comparar", "historia", "diferencia", "mejor opcion", "days", "trip"]
+        if any(k in text.lower() for k in high_cost_keywords):
+            return "high_cost"
+            
+        # High Cost by length (long complex questions)
+        if len(text.split()) > 15:
+            return "high_cost"
+            
+        # Default to Medium Cost (Simple questions)
+        return "medium_cost"
 
     def get_optimized_response(self, text: str, last_response: str = "") -> Dict[str, Any]:
         """
@@ -58,15 +72,17 @@ class TokenOptimizer:
                 "bypass": bool,
                 "instruction": str, # What the LLM should do
                 "suggested_response": str # The exact text to say if bypass is True
+                "intent": str # Added for tracking
             }
         """
         clean_text = self.normalize_input(text)
         intent = self.classify_intent(clean_text)
         
-        # Hack 6: Rules for bypassing complex logic
+        # Hack 6: Rules for bypassing complex logic (Low Cost)
         if intent == "greeting":
             return {
                 "bypass": True,
+                "intent": intent,
                 "instruction": "DETECTED_INTENT: Greeting. ACTION: Reply slightly enthusiastically with a short greeting in the user's language. Do NOT ask complex questions yet.",
                 "suggested_response": self.templates["greeting"]
             }
@@ -74,6 +90,7 @@ class TokenOptimizer:
         if intent == "confirm":
              return {
                 "bypass": True,
+                "intent": intent,
                 "instruction": "DETECTED_INTENT: Confirmation. ACTION: Acknowledge briefly (e.g., 'Great', 'Okay').",
                 "suggested_response": self.templates["confirm"]
             }
@@ -81,6 +98,7 @@ class TokenOptimizer:
         if intent == "gratitude":
              return {
                 "bypass": True,
+                "intent": intent,
                 "instruction": "DETECTED_INTENT: Gratitude. ACTION: Say 'You're welcome' briefly.",
                 "suggested_response": self.templates["gratitude"]
             }
@@ -88,14 +106,25 @@ class TokenOptimizer:
         if intent == "repeat":
              return {
                 "bypass": True,
+                "intent": intent,
                 "instruction": f"DETECTED_INTENT: Request Repeat. ACTION: Repeat the previous information: '{last_response}'",
                 "suggested_response": last_response
             }
 
-        # If complex, we don't bypass, but we optimize output
+        # Medium Cost (Simple Query)
+        if intent == "medium_cost":
+             return {
+                "bypass": False,
+                "intent": intent,
+                "instruction": "DETECTED_INTENT: Simple Query. ACTION: Check Cache first. Reply consistently but concisely (max 2 sentences).",
+                "suggested_response": None
+            }
+
+        # High Cost (Deep Dive)
         return {
             "bypass": False,
-            "instruction": "Responde de forma concisa (máx 2 frases). Si das opciones, da máximo 2. / Reply concisely (max 2 sentences). If offering options, give max 2.",
+            "intent": "high_cost",
+            "instruction": "DETECTED_INTENT: Complex Planning. ACTION: Use full context, memory, and reasoning. Create a personalized answer but keep it structure (max 3-4 sentences).",
             "suggested_response": None
         }
 

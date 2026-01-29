@@ -1,5 +1,3 @@
-import json
-import os
 from fastapi import APIRouter, HTTPException, Request
 from backend.services.weather import weather_service
 from backend.services.optimizer import optimizer
@@ -7,10 +5,14 @@ from backend.services.cache import cache, CACHE_TTL
 from backend.services.rate_limiter import rate_limiter
 from backend.services.metrics import metrics
 from backend.services.analytics import analytics
+from backend.services.usage_counter import usage_counter
+from backend.services.tourist_memory import get_tourist_memory
+from backend.services.email_index import email_index
 from fastapi.responses import HTMLResponse
 import datetime
 import time
 import os
+import uuid
 
 router = APIRouter()
 
@@ -58,6 +60,116 @@ async def get_weather(city: str):
     Get current weather for the city.
     """
     return await weather_service.get_weather(city)
+
+@router.get("/api/session")
+async def get_or_create_session(session_id: str = None):
+    """
+    Get or create a persistent session.
+    """
+    if not session_id or session_id == "null":
+        session_id = str(uuid.uuid4())
+    
+    session = usage_counter.get_session(session_id)
+    return {
+        "session_id": session_id,
+        "tier": session.tier,
+        "usage": {
+            "interactions": session.interaction_count,
+            "cost": round(session.total_cost_eur, 4)
+        }
+    }
+
+@router.get("/api/usage/{session_id}")
+async def get_usage(session_id: str):
+    """
+    Get usage stats/costs for the frontend counter.
+    """
+    return usage_counter.get_usage_stats(session_id)
+
+@router.post("/api/upgrade")
+async def upgrade_tier(request: Request):
+    """
+    Step 1: Start Mock Upgrade Process
+    In real life: Create Stripe Session -> Return URL
+    """
+    try:
+        body = await request.json()
+        session_id = body.get("session_id")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="Missing session_id")
+            
+        # Mock: Return a 'fake' checkout URL or just success for now
+        # V2 Architecture says: StripeCheckout -> GetEmail -> LinkSession
+        
+        return {
+            "status": "pending",
+            "checkout_url": f"/mock_checkout?session_id={session_id}", 
+            "message": "Redirecting to payment..."
+        }
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/upgrade/complete")
+async def complete_upgrade(request: Request):
+    """
+    Step 2: Webhook or Success Page Callback
+    Link sessionID to Email and Upgrade Tier.
+    """
+    try:
+        body = await request.json()
+        session_id = body.get("session_id")
+        email = body.get("email") # In real webhook, comes from Stripe Customer
+        
+        if not session_id or not email:
+            raise HTTPException(status_code=400, detail="Missing data")
+            
+        # 1. Update Memory (Domain Logic)
+        memory = get_tourist_memory(session_id)
+        memory.set_email(email)
+        memory.set_tier("premium")
+        
+        # 2. Update Usage Counter (Billing Logic)
+        u_session = usage_counter.upgrade_user(session_id)
+        
+        # 3. Index for Recovery
+        email_index.save_mapping(email, session_id)
+        
+        return {
+            "status": "success",
+            "tier": "premium",
+            "email": email,
+            "message": "Upgrade complete. Session linked."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/session/recover")
+async def recover_session(request: Request):
+    """
+    Recover session ID by email.
+    """
+    try:
+        body = await request.json()
+        email = body.get("email")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Missing email")
+            
+        session_id = email_index.get_session_id(email)
+        
+        if session_id:
+             # In real app: Send Magic Link via Email
+             # Here: Return ID for demo purposes (or 404 to be safe?)
+             # Let's simulate "Email Sent" but strictly speaking we return status
+             print(f"DEBUG: Recovered {session_id} for {email}")
+             return {"status": "email_sent", "debug_token": session_id} # Debug token for demo
+        else:
+             # Security: Don't reveal if email exists? 
+             # For demo, explicit is better
+             return {"status": "not_found", "message": "No session found for this email."}
+             
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/conversation/log")
 async def log_conversation(request: Request):
@@ -275,19 +387,47 @@ async def get_city_context(request: Request):
     # Brevity Rules
     brevity_rules = (
         " REGLAS DE BREVEDAD (CRÍTICO): "
-        "- Máximo 2 oraciones por respuesta "
-        "- NO listas largas, máximo 3 opciones "
-        "- Usa '¿Quieres que te cuente más?' en vez de explicar todo "
+        "- RESPUESTAS CORTAS (max 30 palabras) "
+        "- NO listas largas, máximo 2 opciones "
+        "- TONO: Amiga local, no guía robótica. "
     )
+    
+    # MEMORY INTEGRATION (V2)
+    # 1. Get Memory
+    memory = get_tourist_memory(user_id)
+    
+    # 2. Add User Interaction (triggers learning)
+    if user_message:
+         memory.add_interaction("user", user_message)
+
+    # 3. Get Context for LLM
+    memory_context = memory.get_llm_context()
+    
+    # 4. Filter Places based on Preferences (if available) -> Advanced logic for V3, basic now
+    # If user likes "jazz", prioritize "jazz" places from all_places
+    preferred_interests = memory.data.preferences.interests
+    if preferred_interests:
+         # Simple boost: move matching places to top
+         featured_places.sort(key=lambda x: any(i in str(x).lower() for i in preferred_interests), reverse=True)
+
     if tier == "free":
         brevity_rules += "- Si el usuario es FREE tier: respuestas ultra-concisas y NUNCA repitas información. "
 
     if opt_result["bypass"]:
         # Strong instruction to just follow the script
-        final_instructions = f"{opt_result['instruction']} (Responde EXACTAMENTE esto o traducido: '{opt_result['suggested_response']}')"
+        # Even in bypass, we log the Assistant response to memory
+        final_response_text = opt_result['suggested_response']
+        memory.add_interaction("assistant", final_response_text)
+        
+        final_instructions = f"{opt_result['instruction']} (Responde EXACTAMENTE esto o traducido: '{final_response_text}')"
     else:
-        # Complex logic allowed, but keep it short
-        final_instructions = f"{base_instruction} {opt_result['instruction']} {brevity_rules}"
+        # Complex logic allowed
+        # Pass the memory context to the system prompt
+        final_instructions = (
+            f"{base_instruction} "
+            f"MEMORY CONTEXT:\n{memory_context}\n"
+            f"INSTRUCTION: {opt_result['instruction']} {brevity_rules}"
+        )
 
     response = {
         "city": city,
@@ -301,18 +441,40 @@ async def get_city_context(request: Request):
         "tier": tier
     }
 
+    # Log assistant response (cannot log exact content as it's generated by LLM, 
+    # but we can log the Plan. Ideally we'd get the audio-text back from 11labs, 
+    # but for now we trust the LLM follows instructions or we log 'generated response')
+    # For now, we don't log 'assistant' here because we don't know exactly what it said yet.
+    # It will be logged in the NEXT turn if we had conversation history, 
+    # OR we can assume it follows instruction.
+    # Let's log a placeholder for flow continuity
+    if not opt_result["bypass"]:
+         memory.add_interaction("assistant", "[Generated info about " + meal_suggestion + "]")
+
     # 5. Guardar en cache (Solo si no hay mensaje específico)
     if not user_query:
         cache.set(cache_key, response, CACHE_TTL["city_context"])
 
-    # 6. Registrar request
-    rate_limiter.record_request(user_id)
-    metrics.record_request(tier)
-
+    # 6. Registrar request y Costos (V2 Usage Logic)
     # Estimate logic for metrics (approx)
     tokens_in = len(user_message) / 4
     tokens_out = len(str(response)) / 4
+    
+    # Record Legacy Metrics
+    metrics.record_request(tier)
     metrics.record_llm_call(int(tokens_in), int(tokens_out))
+
+    # Record V2 Usage Counter (Billing)
+    # Cost is calculated inside record_usage if not provided, based on service type
+    usage_counter.record_usage(
+        session_id=user_id,
+        service="claude", # Main driver is the LLM logic
+        action="completion",
+        cached=False
+    )
+    
+    # Also record weather cost if we called it (approx)
+    usage_counter.record_usage(user_id, "weather", "current_weather")
 
     # 7. Persistent Analytics Log
     analytics.record_interaction(

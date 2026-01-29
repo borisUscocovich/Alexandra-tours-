@@ -163,6 +163,43 @@
         <div id="statusLabel" class="status-text">YOUR LOCAL GUIDE</div>
     </div>
 
+    <!-- UPGRADE MODAL -->
+    <div id="upgradeModal" class="ui-layer hidden"
+        style="position: fixed; top: 0; left: 0; z-index: 2000; background: rgba(0,0,0,0.95); pointer-events: auto;">
+        <div
+            style="background: #111; border: 1px solid var(--text-gold); padding: 30px; border-radius: 10px; text-align: center; max-width: 85%; width: 350px;">
+            <div style="color: var(--text-gold); font-size: 1.2rem; letter-spacing: 2px; margin-bottom: 20px;">UPGRADE
+                ALEXANDRA</div>
+            <p style="font-size: 0.9rem; color: #ccc; margin-bottom: 25px; line-height: 1.6;">
+                Llevamos un buen rato juntos.<br>
+                Para seguir acompañándote sin límites, activamos el modo viaje completo.<br><br>
+                <span style="color: white; font-weight: 600;">Hold de 10€</span> <span style="font-size:0.8rem">(Solo
+                    pagas lo que uses)</span>
+            </p>
+
+            <div id="upgradeBtn"
+                style="background: var(--text-gold); color: black; padding: 15px 30px; font-weight: 600; cursor: pointer; border-radius: 5px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px;">
+                Continuar con Tarjeta
+            </div>
+
+            <div id="cancelUpgradeBtn"
+                style="color: #666; font-size: 0.8rem; cursor: pointer; text-decoration: underline; letter-spacing: 1px;">
+                MEJOR MAÑANA (GRATIS)
+            </div>
+        </div>
+    </div>
+
+    <div id="usage-container"
+        style="position: absolute; top: 20px; right: 20px; width: 200px; text-align: right; pointer-events: auto;">
+        <div style="font-size: 0.7rem; color: rgba(255,255,255,0.5); letter-spacing: 1px; margin-bottom: 5px;">
+            CONSUMPTION</div>
+        <div style="background: rgba(255,255,255,0.1); height: 4px; width: 100%; border-radius: 2px; overflow: hidden;">
+            <div id="usage-bar" style="background: var(--text-gold); height: 100%; width: 0%;"></div>
+        </div>
+        <div id="usage-text" style="font-size: 0.7rem; color: rgba(255,255,255,0.8); margin-top: 5px;">0.00€ / 1.00€
+        </div>
+    </div>
+
     <div id="debugConsole"></div>
 
     <script type="module">
@@ -175,6 +212,62 @@
         let isConnected = false;
         let mode = 'idle';
         let globalMicStream = null;
+        let sessionData = null;
+
+        // --- SESSION MANAGEMENT ---
+        async function initSession() {
+            let sid = localStorage.getItem('alexandra_session_id');
+            try {
+                const res = await fetch(`/api/session?session_id=${sid || 'null'}`);
+                sessionData = await res.json();
+                localStorage.setItem('alexandra_session_id', sessionData.session_id);
+                updateUsageUI(sessionData);
+            } catch (e) {
+                console.error("Session Init Failed", e);
+            }
+        }
+
+        async function refreshUsage() {
+            if (!sessionData) return;
+            try {
+                const res = await fetch(`/api/usage/${sessionData.session_id}`);
+                const data = await res.json();
+                updateUsageUI(data);
+
+                if (data.limit_reached) {
+                    statusLabel.textContent = "LIMIT REACHED";
+                    statusLabel.style.color = "red";
+                }
+            } catch (e) {
+                console.error("Usage refresh failed", e);
+            }
+        }
+
+        function updateUsageUI(data) {
+            const usageBar = document.getElementById('usage-bar');
+            const usageText = document.getElementById('usage-text');
+
+            let max = data.max_interactions || 30; // Fallback
+            if (data.tier === 'premium') max = 500; // Visual scale
+
+            const current = data.interaction_count || 0;
+            const pct = Math.min((current / max) * 100, 100);
+
+            usageBar.style.width = `${pct}%`;
+
+            if (data.tier === 'free') {
+                usageText.textContent = `${current} / ${max} (FREE)`;
+                if (current >= max) usageBar.style.background = "#ff4444";
+            } else {
+                usageText.textContent = `${data.total_cost_eur.toFixed(2)}€ (PREMIUM)`;
+                usageBar.style.background = "#4ade80";
+            }
+        }
+
+        // Poll usage every 5 seconds
+        setInterval(refreshUsage, 5000);
+        initSession();
+
 
         // --- DEBUG ---
         const debugConsole = document.getElementById('debugConsole');
@@ -400,6 +493,13 @@
         async function connect() {
             if (isConnected) return;
             try {
+                // Ensure usage limit is not reached before connecting
+                if (sessionData && sessionData.limit_reached && sessionData.tier === 'free') {
+                    alert("Límite gratuito alcanzado. Actualiza a Premium para continuar.");
+                    // In real app, redirect to /upgrade or show modal
+                    return;
+                }
+
                 btnText.classList.add('hidden');
                 loader.classList.remove('hidden');
                 statusLabel.textContent = "INITIALIZING...";
@@ -422,6 +522,9 @@
                         statusLabel.style.color = "rgba(255,255,255,0.8)";
                         endBtn.style.display = "block";
                         lg("Connected.");
+
+                        // Force refresh usage after connection
+                        refreshUsage();
                     },
                     onDisconnect: () => disconnect(),
                     onError: (e) => {
@@ -434,6 +537,11 @@
                         mode = m.mode;
                         statusLabel.textContent = mode === 'speaking' ? "SPEAKING" : "LISTENING";
                         statusLabel.style.color = mode === 'speaking' ? "#D4AF37" : "#4ade80";
+
+                        // If finished speaking, refresh usage shortly after
+                        if (mode === 'listening') { // transitions to listening after speaking usually
+                            setTimeout(refreshUsage, 4000);
+                        }
                     }
                 });
             } catch (e) {
@@ -456,7 +564,7 @@
             if (conversation) { try { await conversation.endSession(); } catch (e) { } conversation = null; }
             if (audioCtx) {
                 audioCtx.onstatechange = null;  // Remove listener first
-                try { await audioCtx.close(); } catch(e) {}  // Prevent "close twice" error
+                try { await audioCtx.close(); } catch (e) { }  // Prevent "close twice" error
                 audioCtx = null;
             }
             window.location.reload();
@@ -470,6 +578,56 @@
         btn.addEventListener('mouseleave', stopTalking);
         btn.addEventListener('touchcancel', stopTalking);
         window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
+
+        // UPGRADE MODAL LOGIC
+        const upgradeModal = document.getElementById('upgradeModal');
+        const upgradeBtn = document.getElementById('upgradeBtn');
+        const cancelUpgradeBtn = document.getElementById('cancelUpgradeBtn');
+
+        if (upgradeBtn) {
+            upgradeBtn.addEventListener('click', async () => {
+                upgradeBtn.textContent = "PROCESANDO...";
+                try {
+                    const res = await fetch('/api/upgrade', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionData.session_id })
+                    });
+                    const data = await res.json();
+
+                    // MOCK UPGRADE SUCCESS (Simulate Stripe Redirect -> Webhook)
+                    setTimeout(async () => {
+                        // Call the completion endpoint to simulate webhook callback
+                        await fetch('/api/upgrade/complete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: sessionData.session_id,
+                                email: "demo@user.com"
+                            })
+                        });
+
+                        // Reload session properties
+                        await initSession();
+                        upgradeModal.classList.add('hidden');
+                        alert("¡Upgrade completado! Disfruta de Alexandra sin límites.");
+                        upgradeBtn.textContent = "CONTINUAR CON TARJETA";
+                    }, 1500);
+
+                } catch (e) {
+                    console.error("Upgrade error:", e);
+                    upgradeBtn.textContent = "ERROR (TRY AGAIN)";
+                }
+            });
+        }
+
+        if (cancelUpgradeBtn) {
+            cancelUpgradeBtn.addEventListener('click', () => {
+                upgradeModal.classList.add('hidden');
+            });
+        }
+
+
 
     </script>
 </body>
